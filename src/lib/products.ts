@@ -145,7 +145,8 @@ export type Stats = {
   categories: number;
   brands: number;
   active: number;
-  perFamily: { family: Product["family"]; emoji: string; unique: number; total: number; categories: number; brands: number; topBrand: string }[];
+  onShop: number; // SKUs that match an entry in the live shop catalog
+  perFamily: { family: Product["family"]; emoji: string; unique: number; total: number; categories: number; brands: number; topBrand: string; onShop: number }[];
   topCategories: { category: string; family: Product["family"]; emoji: string; unique: number; total: number }[];
 };
 
@@ -168,6 +169,7 @@ export function buildStats(): Stats {
     const brandCounts = new Map<string, number>();
     for (const p of list) brandCounts.set(p.brand, (brandCounts.get(p.brand) ?? 0) + 1);
     const topBrand = [...brandCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
+    const onShopCount = list.filter((p) => SITE_BY_SKU.has(p.sku)).length;
     perFamily.push({
       family,
       emoji: list[0]?.familyEmoji ?? "📦",
@@ -176,6 +178,7 @@ export function buildStats(): Stats {
       categories: cats.size,
       brands: brs.size,
       topBrand,
+      onShop: onShopCount,
     });
   }
   perFamily.sort((a, b) => b.total - a.total);
@@ -198,6 +201,8 @@ export function buildStats(): Stats {
     .sort((a, b) => b.total - a.total)
     .slice(0, 15);
 
+  const onShop = PRODUCTS.filter((p) => SITE_BY_SKU.has(p.sku)).length;
+
   cachedStats = {
     totalSkus: PRODUCTS.length,
     uniqueProducts: cat.length,
@@ -205,6 +210,7 @@ export function buildStats(): Stats {
     categories: categories.size,
     brands: brands.size,
     active,
+    onShop,
     perFamily,
     topCategories,
   };

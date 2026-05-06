@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { Store, ArrowRight } from "lucide-react";
 import { buildStats } from "@/lib/products";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +33,37 @@ export default function DashboardPage() {
         </p>
       </div>
 
+      {/* Live-on-shop callout */}
+      <Link
+        href="/winkel"
+        className="group flex items-center justify-between gap-4 mb-6 px-5 sm:px-7 py-5 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-emerald-50/40 hover:border-emerald-400 hover:shadow-md transition-all"
+      >
+        <div className="flex items-center gap-4">
+          <span className="inline-flex items-center justify-center size-12 rounded-xl bg-emerald-500 text-white shrink-0">
+            <Store className="size-5" />
+          </span>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-emerald-700 mb-1">
+              Live op de webshop
+            </p>
+            <p className="font-black text-2xl sm:text-3xl text-slate-900 tabular-nums tracking-tight">
+              {s.onShop.toLocaleString("nl-NL")}
+              <span className="text-slate-400 font-bold text-lg"> / {s.totalSkus.toLocaleString("nl-NL")} SKU's</span>
+              <span className="ml-3 text-emerald-700 text-sm font-bold tabular-nums">
+                ({((s.onShop / s.totalSkus) * 100).toFixed(1)}%)
+              </span>
+            </p>
+            <p className="text-[12px] text-slate-500 mt-0.5">
+              Producten die je klanten op dit moment online kunnen kopen.
+            </p>
+          </div>
+        </div>
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-emerald-700 group-hover:text-emerald-900 transition-colors shrink-0">
+          Bekijk lijst
+          <ArrowRight className="size-3.5 group-hover:translate-x-0.5 transition-transform" />
+        </span>
+      </Link>
+
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-10">
         {kpis.map((k) => (
@@ -59,11 +92,14 @@ export default function DashboardPage() {
                 <th className="px-4 py-2.5 text-right">Totaal SKU's</th>
                 <th className="px-4 py-2.5 text-right">Categorieën</th>
                 <th className="px-4 py-2.5 text-right">Merken</th>
+                <th className="px-4 py-2.5 text-right">Op shop</th>
                 <th className="px-4 py-2.5 text-left">Populairste merk</th>
               </tr>
             </thead>
             <tbody>
-              {s.perFamily.map((f) => (
+              {s.perFamily.map((f) => {
+                const pct = f.total > 0 ? (f.onShop / f.total) * 100 : 0;
+                return (
                 <tr key={f.family} className="border-b border-slate-50 last:border-0">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 mb-1.5">
@@ -81,9 +117,20 @@ export default function DashboardPage() {
                   <td className="px-4 py-3 text-right tabular-nums font-bold text-slate-900">{f.total.toLocaleString("nl-NL")}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-500">{f.categories}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-500">{f.brands}</td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    {f.onShop > 0 ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="font-bold text-emerald-700 tabular-nums">{f.onShop}</span>
+                        <span className="text-[10px] text-slate-400 tabular-nums">({pct.toFixed(0)}%)</span>
+                      </span>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{f.topBrand}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
