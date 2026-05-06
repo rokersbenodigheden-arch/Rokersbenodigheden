@@ -590,7 +590,9 @@ function DetailModal({ product: p, onClose }: { product: Product; onClose: () =>
                     <Check className="size-3.5" strokeWidth={3} />
                   </span>
                 ) : (
-                  "—"
+                  <span className="inline-flex items-center justify-center size-5 rounded-full bg-rose-500 text-white">
+                    <X className="size-3.5" strokeWidth={3} />
+                  </span>
                 )
               }
             />
