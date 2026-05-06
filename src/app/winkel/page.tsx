@@ -172,7 +172,6 @@ export default function WinkelPage() {
                   sizes="(max-width: 640px) 50vw, 20vw"
                   className="object-contain p-3 sm:p-4 transition-transform duration-500 group-hover:scale-[1.04]"
                   style={{ mixBlendMode: "multiply" }}
-                  unoptimized
                 />
                 <span className="absolute top-2 right-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-black uppercase tracking-wider shadow-sm">
                   <Store className="size-2.5" />

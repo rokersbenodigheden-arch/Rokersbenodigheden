@@ -260,7 +260,6 @@ export default function ZoekerPage() {
                               sizes="48px"
                               className="object-contain p-1.5"
                               style={{ mixBlendMode: "multiply" }}
-                              unoptimized
                             />
                           ) : (
                             <div className="absolute inset-0 flex items-center justify-center text-slate-300">
@@ -397,7 +396,6 @@ export default function ZoekerPage() {
                     sizes="(max-width: 640px) 50vw, 25vw"
                     className="object-contain p-3 sm:p-4 transition-transform duration-500 group-hover:scale-[1.04]"
                     style={{ mixBlendMode: "multiply" }}
-                    unoptimized
                   />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center text-slate-300">
@@ -493,7 +491,6 @@ function DetailModal({ product: p, onClose }: { product: Product; onClose: () =>
                 fill
                 className="object-contain p-6"
                 style={{ mixBlendMode: "multiply" }}
-                unoptimized
               />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center text-slate-300">
