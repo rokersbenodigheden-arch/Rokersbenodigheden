@@ -2,8 +2,7 @@
 
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { Search, X, ExternalLink, Package, Tag, Hash, Truck, Boxes, ChevronRight } from "lucide-react";
+import { Search, X, Package, Tag, Hash, Truck, Boxes, ChevronRight } from "lucide-react";
 import { PRODUCTS, type Product } from "@/lib/products";
 import { cn, formatEuro, formatPercent, marginColor } from "@/lib/utils";
 
@@ -32,11 +31,33 @@ export default function ZoekerPage() {
   const [family, setFamily] = useState<string>("");
   const [brand, setBrand] = useState<string>("");
   const [active, setActive] = useState<Product | null>(null);
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const suggestRef = useRef<HTMLDivElement>(null);
 
-  // Open the modal with `?` when typing — focus the search on mount
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  // Close suggestions on outside click / Escape
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (
+        suggestRef.current && !suggestRef.current.contains(e.target as Node) &&
+        inputRef.current && !inputRef.current.contains(e.target as Node)
+      ) {
+        setSuggestOpen(false);
+      }
+    }
+    function key(e: KeyboardEvent) {
+      if (e.key === "Escape") setSuggestOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("keydown", key);
+    };
   }, []);
 
   // Brand list scoped to current family selection
@@ -79,6 +100,50 @@ export default function ZoekerPage() {
 
   const visible = results.slice(0, 60);
 
+  // ── Suggestion engine ─────────────────────────────────────────────
+  // Returns up to N matches per kind. A match is any string that contains
+  // the typed prefix as a substring (case-insensitive), so partial / typo-
+  // adjacent inputs still surface meaningful starting points.
+  const suggestions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (q.length < 1) return { brands: [], categories: [], products: [] as Product[] };
+
+    // Brand suggestions — frequency-weighted
+    const brandMap = new Map<string, number>();
+    for (const p of PRODUCTS) {
+      if (!p.brand) continue;
+      const b = p.brand;
+      if (b.toLowerCase().includes(q)) brandMap.set(b, (brandMap.get(b) ?? 0) + 1);
+    }
+    const brandHits = [...brandMap.entries()]
+      .sort((a, b) => {
+        const aStarts = a[0].toLowerCase().startsWith(q) ? 1 : 0;
+        const bStarts = b[0].toLowerCase().startsWith(q) ? 1 : 0;
+        if (aStarts !== bStarts) return bStarts - aStarts;
+        return b[1] - a[1];
+      })
+      .slice(0, 4);
+
+    // Category suggestions
+    const catMap = new Map<string, number>();
+    for (const p of PRODUCTS) {
+      if (!p.category) continue;
+      if (p.category.toLowerCase().includes(q)) catMap.set(p.category, (catMap.get(p.category) ?? 0) + 1);
+    }
+    const catHits = [...catMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+
+    // Product suggestions — pull from already-scored results
+    const productHits = results.slice(0, 6);
+
+    return { brands: brandHits, categories: catHits, products: productHits };
+  }, [query, results]);
+
+  const showSuggestions = suggestOpen && query.trim().length > 0 && (
+    suggestions.brands.length > 0 || suggestions.categories.length > 0 || suggestions.products.length > 0
+  );
+
   return (
     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
 
@@ -95,26 +160,136 @@ export default function ZoekerPage() {
         </p>
       </div>
 
-      {/* ── Search box ── */}
+      {/* ── Search box + suggestions ── */}
       <div className="relative mb-6">
-        <Search className="absolute left-5 top-1/2 -translate-y-1/2 size-5 text-slate-400 pointer-events-none" />
+        <Search className="absolute left-5 top-1/2 -translate-y-1/2 size-5 text-slate-400 pointer-events-none z-10" />
         <input
           ref={inputRef}
           type="search"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Bijv. 'Zippo Brushed', 'BIC Maxi', '60004897'…"
+          onFocus={() => setSuggestOpen(true)}
+          onChange={(e) => { setQuery(e.target.value); setSuggestOpen(true); }}
+          placeholder="Type een merk, productnaam, SKU of categorie — suggesties verschijnen direct…"
           className="w-full h-14 sm:h-16 pl-14 pr-14 rounded-2xl border border-slate-200 bg-white text-slate-900 text-[15px] sm:text-base outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-500/15 transition-all"
         />
         {query && (
           <button
             type="button"
             aria-label="Wissen"
-            onClick={() => setQuery("")}
-            className="absolute right-4 top-1/2 -translate-y-1/2 size-9 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-900 flex items-center justify-center transition-colors"
+            onClick={() => { setQuery(""); inputRef.current?.focus(); }}
+            className="absolute right-4 top-1/2 -translate-y-1/2 size-9 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-900 flex items-center justify-center transition-colors z-10"
           >
             <X className="size-4" />
           </button>
+        )}
+
+        {/* Suggestion dropdown */}
+        {showSuggestions && (
+          <div
+            ref={suggestRef}
+            className="absolute z-30 left-0 right-0 top-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden"
+          >
+            {/* Brands */}
+            {suggestions.brands.length > 0 && (
+              <div className="px-4 py-3 border-b border-slate-100">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">Merken</p>
+                <div className="flex flex-wrap gap-2">
+                  {suggestions.brands.map(([b, count]) => (
+                    <button
+                      type="button"
+                      key={b}
+                      onClick={() => {
+                        setBrand(b);
+                        setQuery("");
+                        setSuggestOpen(false);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200 bg-white hover:border-amber-500 hover:bg-amber-50 text-[12px] font-semibold text-slate-700 hover:text-amber-700 transition-colors"
+                    >
+                      <Tag className="size-3.5 text-slate-400" />
+                      {b}
+                      <span className="text-slate-400 tabular-nums">({count})</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Categories */}
+            {suggestions.categories.length > 0 && (
+              <div className="px-4 py-3 border-b border-slate-100">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">Categorieën</p>
+                <div className="flex flex-wrap gap-2">
+                  {suggestions.categories.map(([c, count]) => (
+                    <button
+                      type="button"
+                      key={c}
+                      onClick={() => {
+                        setQuery(c);
+                        setSuggestOpen(false);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200 bg-white hover:border-amber-500 hover:bg-amber-50 text-[12px] font-semibold text-slate-700 hover:text-amber-700 transition-colors"
+                    >
+                      <Boxes className="size-3.5 text-slate-400" />
+                      {c}
+                      <span className="text-slate-400 tabular-nums">({count})</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Product hits */}
+            {suggestions.products.length > 0 && (
+              <div className="px-2 py-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1 px-2">Producten</p>
+                <ul className="flex flex-col">
+                  {suggestions.products.map((p) => (
+                    <li key={p.sku}>
+                      <button
+                        type="button"
+                        onClick={() => { setActive(p); setSuggestOpen(false); }}
+                        className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-50 text-left transition-colors group"
+                      >
+                        <div className="relative size-12 shrink-0 rounded-md bg-slate-50 overflow-hidden border border-slate-100">
+                          {p.image ? (
+                            <Image
+                              src={p.image}
+                              alt={p.name}
+                              fill
+                              sizes="48px"
+                              className="object-contain p-1.5"
+                              style={{ mixBlendMode: "multiply" }}
+                              unoptimized
+                            />
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center text-slate-300">
+                              <Package className="size-4" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                            {p.familyEmoji} {p.brand}
+                          </p>
+                          <p className="text-[13px] font-semibold text-slate-900 truncate">{p.name}</p>
+                        </div>
+                        <span className="text-[12px] font-bold text-slate-900 tabular-nums shrink-0">
+                          {formatEuro(p.sell)}
+                        </span>
+                        <ChevronRight className="size-3.5 text-slate-300 group-hover:text-slate-500 transition-colors shrink-0" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-500">
+              <span className="font-bold text-slate-900 tabular-nums">{results.length.toLocaleString("nl-NL")}</span> producten matchen je zoekopdracht
+              <span className="text-slate-400"> — druk Enter om alles te zien</span>
+            </div>
+          </div>
         )}
       </div>
 
@@ -397,18 +572,6 @@ function DetailModal({ product: p, onClose }: { product: Product; onClose: () =>
             </Section>
           )}
 
-          {/* External link */}
-          {p.productUrl && (
-            <Link
-              href={p.productUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-flex items-center gap-2 px-5 py-3 rounded-lg bg-slate-900 hover:bg-amber-600 text-white text-[12px] font-bold uppercase tracking-widest transition-colors"
-            >
-              Open productpagina
-              <ExternalLink className="size-3.5" />
-            </Link>
-          )}
         </div>
       </div>
     </div>
