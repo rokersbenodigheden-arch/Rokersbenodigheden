@@ -2,8 +2,9 @@
 
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import { Search, X, Package, Tag, Hash, Truck, Boxes, ChevronRight } from "lucide-react";
-import { PRODUCTS, type Product } from "@/lib/products";
+import Link from "next/link";
+import { Search, X, Package, Tag, Hash, Truck, Boxes, ChevronRight, Store, ExternalLink } from "lucide-react";
+import { PRODUCTS, getSiteListing, shopProductUrl, type Product } from "@/lib/products";
 import { cn, formatEuro, formatPercent, marginColor } from "@/lib/utils";
 
 const FAMILIES = ["AANSTEKERS", "VAPING", "E-LIQUIDS", "ROOK-ACCESSOIRES", "BATTERIJEN & OPLADERS", "OVERIG"] as const;
@@ -406,6 +407,12 @@ export default function ZoekerPage() {
                 <span className="absolute top-2 left-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/90 backdrop-blur border border-slate-200 text-[9px] font-black uppercase tracking-wider text-slate-700">
                   {p.familyEmoji} {p.family.split(" ")[0]}
                 </span>
+                {getSiteListing(p.sku) && (
+                  <span className="absolute top-2 right-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-black uppercase tracking-wider shadow-sm">
+                    <Store className="size-2.5" />
+                    Live
+                  </span>
+                )}
               </div>
               <div className="flex flex-col flex-1 p-3 sm:p-3.5 gap-1">
                 <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">{p.brand}</p>
@@ -512,6 +519,54 @@ function DetailModal({ product: p, onClose }: { product: Product; onClose: () =>
               </p>
             </div>
           </div>
+
+          {/* Live on shop */}
+          {(() => {
+            const live = getSiteListing(p.sku);
+            if (!live) return null;
+            const livePrice = parseFloat(live.price);
+            const adminSell = p.sell ?? 0;
+            const diff = livePrice - adminSell;
+            return (
+              <div className="mb-5 p-4 rounded-xl bg-emerald-50 border border-emerald-200">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center justify-center size-6 rounded-full bg-emerald-500 text-white">
+                      <Store className="size-3.5" />
+                    </span>
+                    <p className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-700">
+                      Live op de shop
+                    </p>
+                  </div>
+                  <Link
+                    href={shopProductUrl(live.id)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 transition-colors"
+                  >
+                    Open shop-pagina
+                    <ExternalLink className="size-3" />
+                  </Link>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-[12px]">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-700/70 mb-0.5">Shop-prijs</p>
+                    <p className="font-black text-slate-900 tabular-nums">{formatEuro(livePrice)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-700/70 mb-0.5">vs. inkoop+marge</p>
+                    <p className={cn("font-black tabular-nums", diff >= 0 ? "text-emerald-700" : "text-rose-600")}>
+                      {diff >= 0 ? "+" : ""}{formatEuro(diff)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-700/70 mb-0.5">Beoordeling</p>
+                    <p className="font-black text-slate-900 tabular-nums">★ {live.rating.toFixed(1)} <span className="text-slate-400 font-semibold">({live.reviewCount})</span></p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Identification */}
           <Section title="Identificatie">

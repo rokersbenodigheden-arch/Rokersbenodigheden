@@ -1,4 +1,36 @@
 import raw from "@/data/products.json";
+import siteRaw from "@/data/site-products.json";
+
+// ─── Live-shop catalog (subset of admin SKUs that are sold publicly) ────
+export type SiteProduct = {
+  id: number;
+  sku: string;
+  name: string;
+  brand: string;
+  price: string;
+  oldPrice: string | null;
+  image: string;
+  category: string;
+  rating: number;
+  reviewCount: number;
+};
+
+export const SITE_PRODUCTS = siteRaw as SiteProduct[];
+
+const SITE_BY_SKU = new Map<string, SiteProduct>();
+for (const sp of SITE_PRODUCTS) {
+  if (sp.sku) SITE_BY_SKU.set(sp.sku, sp);
+}
+
+export function getSiteListing(sku: string): SiteProduct | undefined {
+  return SITE_BY_SKU.get(sku);
+}
+
+// Public shop URL pattern. Replace with the live domain once it's swapped.
+export const SHOP_BASE_URL = "https://tbk-zeta.vercel.app";
+export function shopProductUrl(id: number): string {
+  return `${SHOP_BASE_URL}/product/${id}`;
+}
 
 export type Product = {
   sku: string;
