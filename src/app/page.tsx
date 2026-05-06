@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Search, X, Package, Tag, Hash, Truck, Boxes, ChevronRight, Store, ExternalLink } from "lucide-react";
+import { Search, X, Package, Tag, Hash, Truck, Boxes, ChevronRight, Store, ExternalLink, Check } from "lucide-react";
 import { PRODUCTS, getSiteListing, shopProductUrl, type Product } from "@/lib/products";
 import { cn, formatEuro, formatPercent, marginColor } from "@/lib/utils";
 
@@ -582,10 +582,20 @@ function DetailModal({ product: p, onClose }: { product: Product; onClose: () =>
 
           {/* Channels */}
           <Section title="Verkoopkanalen">
-            <Row label="eShop" value={p.eShop || "—"} />
+            <Row
+              label="eShop"
+              value={
+                getSiteListing(p.sku) ? (
+                  <span className="inline-flex items-center justify-center size-5 rounded-full bg-emerald-500 text-white">
+                    <Check className="size-3.5" strokeWidth={3} />
+                  </span>
+                ) : (
+                  "—"
+                )
+              }
+            />
             <Row label="Amazon" value={p.amazon || "—"} />
             <Row label="Bol.com" value={p.bol || "—"} />
-            <Row label="Listing" value={p.listing || "—"} />
           </Section>
 
           {/* Variants */}
@@ -641,7 +651,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Row({ icon, label, value }: { icon?: React.ReactNode; label: string; value: string }) {
+function Row({ icon, label, value }: { icon?: React.ReactNode; label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 text-[13px] py-1.5 border-b border-slate-50 last:border-0">
       <span className="flex items-center gap-2 text-slate-500 shrink-0">
