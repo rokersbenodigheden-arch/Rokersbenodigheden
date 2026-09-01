@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search, BookOpen, List, BarChart3, Store } from "lucide-react";
+import { Search, BookOpen, List, BarChart3, Store, Table2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/",          label: "Zoeker",         icon: Search },
+  { href: "/prijzen",   label: "Prijzen",        icon: Table2 },
   { href: "/winkel",    label: "Op shop",        icon: Store },
   { href: "/catalogus", label: "Catalogus",      icon: BookOpen },
   { href: "/overzicht", label: "Volledig SKU's", icon: List },
