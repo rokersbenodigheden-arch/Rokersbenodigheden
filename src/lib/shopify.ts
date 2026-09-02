@@ -123,6 +123,94 @@ type ShopifyProduct = {
   }[];
 };
 
+/**
+ * The shop's category tree, mirroring the storefront navigation so the price
+ * sheet is organised the way the site is. Each node is a real collection.
+ */
+export const CATEGORY_TREE: { handle: string; label: string; children: { handle: string; label: string }[] }[] = [
+  {
+    handle: "zippos", label: "Zippo aanstekers", children: [
+      { handle: "zippo-design", label: "Design aanstekers" },
+      { handle: "zippo-harley", label: "Harley-Davidson" },
+      { handle: "zippo-etuis", label: "Etuis en pouches" },
+      { handle: "zippo-accessoires", label: "Zippo accessoires" },
+    ],
+  },
+  {
+    handle: "clipper-regulier", label: "Overige aanstekers", children: [
+      { handle: "jetflame-aanstekers", label: "Jetflame" },
+      { handle: "piezo-aanstekers", label: "Piezo" },
+      { handle: "stormaanstekers", label: "Storm" },
+      { handle: "wegwerp-aanstekers", label: "Wegwerp" },
+      { handle: "aanstekergas-vuurstenen", label: "Gas en vuurstenen" },
+      { handle: "merk-clipper", label: "Clipper" },
+    ],
+  },
+  {
+    handle: "rokersbenodigdheden", label: "Rokersbenodigdheden", children: [
+      { handle: "vloei", label: "Vloei" },
+      { handle: "filters-tips", label: "Filters en tips" },
+      { handle: "filters-houders", label: "Filters en houders" },
+      { handle: "rolling-boxes", label: "Rolling boxes" },
+      { handle: "sigarettenkokers", label: "Sigarettenkokers" },
+      { handle: "tabaksgrinders", label: "Tabaksgrinders" },
+    ],
+  },
+  {
+    handle: "sigaren", label: "Sigaren", children: [
+      { handle: "sigarenknippers", label: "Sigarenknippers" },
+      { handle: "sigarenboren", label: "Sigarenboren" },
+      { handle: "sigarenkokers", label: "Sigarenkokers" },
+      { handle: "sigaren-asbakken", label: "Sigarenasbakken" },
+      { handle: "humidors", label: "Humidors" },
+    ],
+  },
+  { handle: "asbakken", label: "Asbakken", children: [] },
+  {
+    handle: "pijpen", label: "Pijpaccessoires", children: [
+      { handle: "bruyere-pijpen", label: "Bruyère pijpen" },
+      { handle: "pijp-bestek", label: "Pijpbestek" },
+    ],
+  },
+  { handle: "sale", label: "Sale", children: [] },
+];
+
+const ALL_HANDLES = CATEGORY_TREE.flatMap((n) => [n.handle, ...n.children.map((c) => c.handle)]);
+
+let membershipCache: { at: number; map: Record<number, string[]> } | null = null;
+const MEMBERSHIP_TTL = 5 * 60 * 1000;
+
+/** productId -> collection handles it belongs to (only handles in the tree). */
+export async function fetchCollectionMembership(): Promise<Record<number, string[]>> {
+  if (membershipCache && Date.now() - membershipCache.at < MEMBERSHIP_TTL) return membershipCache.map;
+
+  // Resolve handles to collection ids (smart + custom).
+  const ids = new Map<string, number>();
+  for (const kind of ["smart_collections", "custom_collections"]) {
+    const res = await admin(`${kind}.json?limit=250&fields=id,handle`);
+    if (!res.ok) continue;
+    const body = (await res.json()) as { [k: string]: { id: number; handle: string }[] };
+    for (const c of body[kind] ?? []) if (ALL_HANDLES.includes(c.handle)) ids.set(c.handle, c.id);
+  }
+
+  const map: Record<number, string[]> = {};
+  for (const [handle, id] of ids) {
+    let path: string | null = `products.json?limit=250&fields=id&collection_id=${id}`;
+    while (path) {
+      const res: Response = await admin(path);
+      if (!res.ok) break;
+      const body = (await res.json()) as { products: { id: number }[] };
+      for (const p of body.products) (map[p.id] ??= []).push(handle);
+      const link = res.headers.get("link") ?? "";
+      const next = link.split(",").find((s) => s.includes('rel="next"'));
+      const m = next?.match(/page_info=([^>&]+)/);
+      path = m ? `products.json?limit=250&fields=id&collection_id=${id}&page_info=${m[1]}` : null;
+    }
+  }
+  membershipCache = { at: Date.now(), map };
+  return map;
+}
+
 /** Write a new selling price (incl. BTW) to one variant. */
 export async function updateVariantPrice(variantId: number, price: number) {
   if (!Number.isFinite(price) || price <= 0) throw new Error("invalid price");

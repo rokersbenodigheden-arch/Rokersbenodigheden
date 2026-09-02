@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
-import { BTW, fetchLivePrices, shopifyConfigured, updateVariantPrice } from "@/lib/shopify";
+import {
+  BTW,
+  CATEGORY_TREE,
+  fetchCollectionMembership,
+  fetchLivePrices,
+  shopifyConfigured,
+  updateVariantPrice,
+} from "@/lib/shopify";
 import feed from "@/data/products.json";
 
 export const runtime = "nodejs";
@@ -24,7 +31,7 @@ export async function GET() {
     );
   }
   try {
-    const live = await fetchLivePrices();
+    const [live, membership] = await Promise.all([fetchLivePrices(), fetchCollectionMembership()]);
     const rows = live.map((r) => {
       const f = COST.get(r.sku);
       const buyUnit = f?.purchase ?? null;
@@ -41,9 +48,14 @@ export async function GET() {
         excl,
         profit,
         margin: profit !== null && excl ? profit / excl : null,
+        collections: membership[r.productId] ?? [],
       };
     });
-    return NextResponse.json({ rows, fetchedAt: new Date().toISOString() });
+    return NextResponse.json({
+      rows,
+      tree: CATEGORY_TREE,
+      fetchedAt: new Date().toISOString(),
+    });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 502 });
   }
