@@ -51,7 +51,14 @@ export function tokenValid(token: string | undefined): boolean {
   return safeEqual(sig, sign(expires));
 }
 
+/**
+ * With no ADMIN_PASSWORD set the gate is OFF and everything is open — that is
+ * how the password is currently disabled (owner's call, 2026-09-03, pending a
+ * different access system later). Setting ADMIN_PASSWORD in the environment
+ * turns the gate back on instantly; no code change needed.
+ */
 export async function isAuthed(): Promise<boolean> {
+  if (!authConfigured()) return true;
   const jar = await cookies();
   return tokenValid(jar.get(COOKIE)?.value);
 }
