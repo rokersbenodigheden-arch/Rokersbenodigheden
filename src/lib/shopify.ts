@@ -60,6 +60,7 @@ async function admin(path: string, init?: RequestInit) {
 export type LivePrice = {
   productId: number;
   variantId: number;
+  inventoryItemId: number | null;
   sku: string;
   title: string;
   vendor: string;
@@ -90,6 +91,7 @@ export async function fetchLivePrices(): Promise<LivePrice[]> {
       out.push({
         productId: p.id,
         variantId: v.id,
+        inventoryItemId: v.inventory_item_id ?? null,
         sku: (v.sku ?? "").trim(),
         title: p.title,
         vendor: p.vendor,
@@ -116,6 +118,7 @@ type ShopifyProduct = {
   vendor: string;
   variants?: {
     id: number;
+    inventory_item_id?: number;
     sku?: string;
     price: string;
     compare_at_price?: string | null;
@@ -224,4 +227,39 @@ export async function updateVariantPrice(variantId: number, price: number) {
   }
   const body = (await res.json()) as { variant: { id: number; price: string } };
   return Number(body.variant.price);
+}
+
+
+let locationId: number | null = null;
+
+/**
+ * The app's scopes include write_inventory but NOT read_locations, so
+ * /locations.json 403s. The inventory level for any item carries its
+ * location_id, so read it from there instead and cache it.
+ */
+async function getLocationId(inventoryItemId: number): Promise<number> {
+  if (locationId) return locationId;
+  const res = await admin(`inventory_levels.json?inventory_item_ids=${inventoryItemId}&limit=1`);
+  if (!res.ok) throw new Error(`inventory level lookup failed (${res.status})`);
+  const body = (await res.json()) as { inventory_levels: { location_id: number }[] };
+  const id = body.inventory_levels?.[0]?.location_id;
+  if (!id) throw new Error("no inventory location for this item");
+  locationId = id;
+  return id;
+}
+
+/** Set the stock level for one inventory item. */
+export async function updateInventory(inventoryItemId: number, available: number) {
+  if (!Number.isInteger(available) || available < 0) throw new Error("invalid stock");
+  const location_id = await getLocationId(inventoryItemId);
+  const res = await admin("inventory_levels/set.json", {
+    method: "POST",
+    body: JSON.stringify({ location_id, inventory_item_id: inventoryItemId, available }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`stock update failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+  const body = (await res.json()) as { inventory_level: { available: number } };
+  return body.inventory_level.available;
 }

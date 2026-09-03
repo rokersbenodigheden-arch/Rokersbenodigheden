@@ -10,6 +10,7 @@ const UNCATEGORISED = "__none";
 type Row = {
   productId: number;
   variantId: number;
+  inventoryItemId: number | null;
   sku: string;
   title: string;
   brand: string;
@@ -59,6 +60,8 @@ export default function PrijzenPage() {
   const [draft, setDraft] = useState<Record<number, string>>({});
   const [saving, setSaving] = useState<Record<number, SaveState>>({});
   const [shut, setShut] = useState<Record<string, boolean>>({});
+  const [stockDraft, setStockDraft] = useState<Record<number, string>>({});
+  const [stockSaving, setStockSaving] = useState<Record<number, SaveState>>({});
   const [sugOpen, setSugOpen] = useState(false);
   const [sugIdx, setSugIdx] = useState(-1);
 
@@ -125,6 +128,37 @@ export default function PrijzenPage() {
       setTimeout(() => setSaving((s) => { const n = { ...s }; delete n[row.variantId]; return n; }), 2500);
     } catch (e) {
       setSaving((s) => ({ ...s, [row.variantId]: { state: "error", message: (e as Error).message } }));
+    }
+  }
+
+  async function saveStock(row: Row) {
+    if (!row.inventoryItemId) return;
+    const raw = (stockDraft[row.variantId] ?? "").trim();
+    if (raw === "") return;
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value < 0) {
+      setStockSaving((s) => ({ ...s, [row.variantId]: { state: "error", message: "Heel getal vanaf 0" } }));
+      return;
+    }
+    if (value === row.inventory) {
+      setStockDraft((d) => { const n = { ...d }; delete n[row.variantId]; return n; });
+      return;
+    }
+    setStockSaving((s) => ({ ...s, [row.variantId]: { state: "saving" } }));
+    try {
+      const res = await fetch("/api/prices", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inventoryItemId: row.inventoryItemId, stock: value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      const saved = Number(data.stock);
+      setRows((rs) => rs.map((r) => (r.variantId === row.variantId ? { ...r, inventory: saved } : r)));
+      setStockDraft((d) => { const n = { ...d }; delete n[row.variantId]; return n; });
+      setStockSaving((s) => ({ ...s, [row.variantId]: { state: "saved" } }));
+      setTimeout(() => setStockSaving((s) => { const n = { ...s }; delete n[row.variantId]; return n; }), 2500);
+    } catch (e) {
+      setStockSaving((s) => ({ ...s, [row.variantId]: { state: "error", message: (e as Error).message } }));
     }
   }
 
@@ -452,15 +486,18 @@ export default function PrijzenPage() {
                     </th>
                     <Th label="Winst" k="profit" {...{ sortKey, sortDir, toggleSort }} align="right" />
                     <Th label="Marge" k="margin" {...{ sortKey, sortDir, toggleSort }} align="right" />
+                    <th className="px-3 py-2.5 text-center bg-sky-600 text-white">
+                      <span className="inline-flex items-center gap-1"><Pencil className="size-3" /> Voorraad</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="tabular-nums">
                   {loading && rows.length === 0 && (
-                    <tr><td colSpan={7} className="px-3 py-10 text-center text-slate-400">
+                    <tr><td colSpan={8} className="px-3 py-10 text-center text-slate-400">
                       <Loader2 className="size-5 animate-spin mx-auto mb-2" />Live prijzen ophalen…</td></tr>
                   )}
                   {!loading && filtered.length === 0 && (
-                    <tr><td colSpan={7} className="px-3 py-10 text-center text-slate-400">Geen producten in deze categorie.</td></tr>
+                    <tr><td colSpan={8} className="px-3 py-10 text-center text-slate-400">Geen producten in deze categorie.</td></tr>
                   )}
                   {(() => {
                     let shown = 0;
@@ -488,6 +525,9 @@ export default function PrijzenPage() {
                               <td className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-700">{eur(gt.profit)}</td>
                               <td className={cn("px-3 py-1.5 text-right text-[11px] font-black", marginClass(gt.margin))}>
                                 {pct(gt.margin)}
+                              </td>
+                              <td className="px-3 py-1.5 text-center text-[11px] font-bold text-slate-500">
+                                {g.rows.reduce((n, r) => n + (r.inventory ?? 0), 0)}
                               </td>
                             </tr>
                           )}
@@ -551,6 +591,42 @@ export default function PrijzenPage() {
                         <td className={cn("px-3 py-1.5 text-right font-black", marginClass(pv ? pv.margin : r.margin))}>
                           {pct(pv ? pv.margin : r.margin)}
                         </td>
+
+                        {/* Editable stock */}
+                        <td className="px-2 py-1 bg-sky-50/70">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <input inputMode="numeric" aria-label={`Voorraad ${r.title}`}
+                              disabled={!r.inventoryItemId}
+                              value={stockDraft[r.variantId] ?? (r.inventory ?? "")}
+                              onChange={(e) => setStockDraft((d) => ({ ...d, [r.variantId]: e.target.value.replace(/[^0-9]/g, "") }))}
+                              onFocus={(e) => e.currentTarget.select()}
+                              onBlur={() => stockDraft[r.variantId] !== undefined && void saveStock(r)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") e.currentTarget.blur();
+                                if (e.key === "Escape") {
+                                  setStockDraft((d) => { const n = { ...d }; delete n[r.variantId]; return n; });
+                                  e.currentTarget.blur();
+                                }
+                              }}
+                              className={cn("w-16 text-center font-bold rounded px-2 py-1.5 outline-none border-2 bg-white transition-colors disabled:opacity-40",
+                                stockDraft[r.variantId] !== undefined
+                                  ? "border-sky-500 ring-2 ring-sky-400/30 text-sky-900"
+                                  : (r.inventory ?? 0) === 0 ? "border-red-300 text-red-700"
+                                    : (r.inventory ?? 0) <= 3 ? "border-amber-300 text-amber-800"
+                                      : "border-slate-300 hover:border-sky-400 hover:bg-sky-50 text-slate-900 cursor-pointer",
+                                stockSaving[r.variantId]?.state === "error" && "border-red-500 ring-2 ring-red-400/30")} />
+                            <span className="w-5 shrink-0 flex items-center">
+                              {stockSaving[r.variantId]?.state === "saving" ? <Loader2 className="size-4 animate-spin text-sky-600" />
+                                : stockSaving[r.variantId]?.state === "saved" ? <Check className="size-4 text-emerald-600" />
+                                  : stockSaving[r.variantId]?.state === "error"
+                                    ? <span title={stockSaving[r.variantId]?.message} className="text-red-600 font-black">!</span>
+                                    : <Pencil className="size-3 text-slate-300" />}
+                            </span>
+                          </div>
+                          {stockSaving[r.variantId]?.state === "error" && (
+                            <p className="text-[10px] text-red-700 text-center mt-0.5">{stockSaving[r.variantId]?.message}</p>
+                          )}
+                        </td>
                       </tr>
                     );
                           })}
@@ -566,6 +642,7 @@ export default function PrijzenPage() {
                     <td className="px-3 py-2 text-center text-slate-500 text-[11px]">excl. {eur(totals.sell)}</td>
                     <td className="px-3 py-2 text-right">{eur(totals.profit)}</td>
                     <td className="px-3 py-2 text-right">{pct(totals.margin)}</td>
+                    <td className="px-3 py-2 text-center">{filtered.reduce((n, r) => n + (r.inventory ?? 0), 0)}</td>
                   </tr>
                 </tfoot>
               </table>
