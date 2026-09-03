@@ -58,6 +58,7 @@ export default function PrijzenPage() {
 
   const [draft, setDraft] = useState<Record<number, string>>({});
   const [saving, setSaving] = useState<Record<number, SaveState>>({});
+  const [shut, setShut] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     setLoading(true); setLoadError("");
@@ -168,6 +169,54 @@ export default function PrijzenPage() {
     const sell = ok.reduce((s, r) => s + r.excl, 0);
     return { count: filtered.length, buy, sell, profit: sell - buy, margin: sell ? (sell - buy) / sell : 0 };
   }, [filtered]);
+
+  /**
+   * Split the visible rows into sub-headed groups so a big category is
+   * scannable: picking "Overige aanstekers" shows Jetflame / Piezo / Storm /
+   * Wegwerp blocks rather than 153 rows in a row. A product lands in the FIRST
+   * matching subcategory so it is never listed twice.
+   */
+  const groups = useMemo(() => {
+    const mk = (key: string, label: string, rs: Row[]) => ({ key, label, rows: rs });
+    const node = tree.find((n) => n.handle === cat);
+
+    // A leaf subcategory or the catch-all: nothing left to split by.
+    if (cat === UNCATEGORISED || (cat && !node)) return [mk(cat, "", filtered)];
+
+    // Sale is a state, not a category — bucketing by it on the overview would
+    // steal products from their real group and leave a misleading "Sale (1)".
+    const buckets = !cat
+      ? tree.filter((n) => n.handle !== "sale").map((n) => ({ handle: n.handle, label: n.label }))
+      : node!.children.map((c) => ({ handle: c.handle, label: c.label }));
+    if (buckets.length === 0) return [mk(cat || "all", "", filtered)];
+
+    const out = buckets.map((b) => mk(b.handle, b.label, [] as Row[]));
+    const byKey = new Map(out.map((g) => [g.key, g]));
+    const rest: Row[] = [];
+    for (const r of filtered) {
+      const hit = buckets.find((b) => r.collections.includes(b.handle));
+      if (hit) byKey.get(hit.handle)!.rows.push(r);
+      else rest.push(r);
+    }
+    if (rest.length) {
+      // "Overige overige aanstekers" reads badly, so a parent already called
+      // "Overige …" just gets a plain "Overig".
+      const restLabel = !cat
+        ? "Niet ingedeeld"
+        : /^overige/i.test(node!.label)
+          ? "Overig"
+          : `Overige ${node!.label.toLowerCase()}`;
+      out.push(mk("__rest", restLabel, rest));
+    }
+    return out.filter((g) => g.rows.length > 0);
+  }, [filtered, cat, tree]);
+
+  const groupTotals = useCallback((rs: Row[]) => {
+    const ok = rs.filter((r) => r.buy !== null);
+    const buy = ok.reduce((s, r) => s + (r.buy ?? 0), 0);
+    const sell = ok.reduce((s, r) => s + r.excl, 0);
+    return { buy, profit: sell - buy, margin: sell ? (sell - buy) / sell : null };
+  }, []);
 
   function toggleSort(k: SortKey) {
     if (sortKey === k) setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -343,7 +392,37 @@ export default function PrijzenPage() {
                   {!loading && filtered.length === 0 && (
                     <tr><td colSpan={7} className="px-3 py-10 text-center text-slate-400">Geen producten in deze categorie.</td></tr>
                   )}
-                  {filtered.slice(0, limit).map((r, i) => {
+                  {(() => {
+                    let shown = 0;
+                    return groups.map((g) => {
+                      const gt = groupTotals(g.rows);
+                      const closed = shut[g.key];
+                      const visible = closed ? [] : g.rows.slice(0, Math.max(0, limit - shown));
+                      if (!closed) shown += visible.length;
+                      return (
+                        <React.Fragment key={g.key || "all"}>
+                          {g.label && (
+                            <tr className="bg-slate-200/80 border-y border-slate-300">
+                              <td colSpan={3} className="px-2 py-1.5">
+                                <button type="button" onClick={() => setShut((c) => ({ ...c, [g.key]: !closed }))}
+                                  className="inline-flex items-center gap-1.5 font-black text-[12px] text-slate-800 uppercase tracking-wide hover:text-amber-700">
+                                  <ChevronRight className={cn("size-3.5 transition-transform", !closed && "rotate-90")} />
+                                  {g.label}
+                                  <span className="ml-1 px-1.5 py-0.5 rounded bg-white text-slate-500 text-[10px] font-bold tabular-nums">
+                                    {g.rows.length}
+                                  </span>
+                                </button>
+                              </td>
+                              <td className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-600">{eur(gt.buy)}</td>
+                              <td className="px-3 py-1.5" />
+                              <td className="px-3 py-1.5 text-right text-[11px] font-bold text-slate-700">{eur(gt.profit)}</td>
+                              <td className={cn("px-3 py-1.5 text-right text-[11px] font-black", marginClass(gt.margin))}>
+                                {pct(gt.margin)}
+                              </td>
+                            </tr>
+                          )}
+                          {visible.map((r, i) => {
+
                     const st = saving[r.variantId];
                     const dirty = draft[r.variantId] !== undefined;
                     const pv = preview(r);
@@ -404,7 +483,11 @@ export default function PrijzenPage() {
                         </td>
                       </tr>
                     );
-                  })}
+                          })}
+                        </React.Fragment>
+                      );
+                    });
+                  })()}
                 </tbody>
                 <tfoot className="sticky bottom-0">
                   <tr className="bg-slate-100 border-t-2 border-slate-300 font-black text-slate-900">
