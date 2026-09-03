@@ -59,6 +59,8 @@ export default function PrijzenPage() {
   const [draft, setDraft] = useState<Record<number, string>>({});
   const [saving, setSaving] = useState<Record<number, SaveState>>({});
   const [shut, setShut] = useState<Record<string, boolean>>({});
+  const [sugOpen, setSugOpen] = useState(false);
+  const [sugIdx, setSugIdx] = useState(-1);
 
   const load = useCallback(async () => {
     setLoading(true); setLoadError("");
@@ -169,6 +171,37 @@ export default function PrijzenPage() {
     const sell = ok.reduce((s, r) => s + r.excl, 0);
     return { count: filtered.length, buy, sell, profit: sell - buy, margin: sell ? (sell - buy) / sell : 0 };
   }, [filtered]);
+
+  /**
+   * Typeahead over the WHOLE catalog, not just the open category — searching
+   * for a Zippo while sitting in Sigaren should still find it. Picking a
+   * suggestion jumps to that product's category and narrows to it, so it is
+   * one row, ready to edit.
+   */
+  const suggestions = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    if (q.length < 2) return [];
+    const tokens = q.split(/\s+/);
+    const hit = (r: Row) => {
+      const hay = `${r.title} ${r.brand} ${r.sku}`.toLowerCase();
+      return tokens.every((t) => hay.includes(t));
+    };
+    // Prefer names that start with what was typed.
+    const starts: Row[] = [], contains: Row[] = [];
+    for (const r of rows) {
+      if (!hit(r)) continue;
+      (r.title.toLowerCase().startsWith(tokens[0]) ? starts : contains).push(r);
+    }
+    return [...starts, ...contains].slice(0, 8);
+  }, [rows, query]);
+
+  function pickSuggestion(r: Row) {
+    const parent = tree.find((n) => r.collections.includes(n.handle));
+    setCat(parent ? parent.handle : "");
+    setQuery(r.title);
+    setSugOpen(false);
+    setSugIdx(-1);
+  }
 
   /**
    * Split the visible rows into sub-headed groups so a big category is
@@ -352,12 +385,49 @@ export default function PrijzenPage() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
             <h2 className="font-black text-lg text-slate-900">{activeLabel}
               <span className="ml-2 text-slate-400 font-bold text-sm">{totals.count} producten</span></h2>
-            <div className="relative sm:ml-auto sm:w-80">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-slate-400 pointer-events-none" />
-              <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Zoek in deze categorie…"
+            <div className="relative sm:ml-auto sm:w-96">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-slate-400 pointer-events-none z-10" />
+              <input
+                value={query}
+                onChange={(e) => { setQuery(e.target.value); setSugOpen(true); setSugIdx(-1); }}
+                onFocus={() => setSugOpen(true)}
+                onBlur={() => setTimeout(() => setSugOpen(false), 150)}
+                onKeyDown={(e) => {
+                  if (!sugOpen || suggestions.length === 0) return;
+                  if (e.key === "ArrowDown") { e.preventDefault(); setSugIdx((i) => (i + 1) % suggestions.length); }
+                  if (e.key === "ArrowUp") { e.preventDefault(); setSugIdx((i) => (i <= 0 ? suggestions.length : i) - 1); }
+                  if (e.key === "Enter" && sugIdx >= 0) { e.preventDefault(); pickSuggestion(suggestions[sugIdx]); }
+                  if (e.key === "Escape") setSugOpen(false);
+                }}
+                placeholder="Zoek een product op naam, merk of SKU…"
+                aria-label="Zoek product" role="combobox" aria-expanded={sugOpen} aria-autocomplete="list"
                 className="w-full h-10 pl-10 pr-9 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-500/15" />
-              {query && <button type="button" aria-label="Wissen" onClick={() => setQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 size-6 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 flex items-center justify-center"><X className="size-3" /></button>}
+              {query && <button type="button" aria-label="Wissen" onClick={() => { setQuery(""); setSugOpen(false); }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 size-6 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 flex items-center justify-center z-10"><X className="size-3" /></button>}
+
+              {/* Suggestions */}
+              {sugOpen && suggestions.length > 0 && (
+                <ul className="absolute z-30 left-0 right-0 top-full mt-1 max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-xl py-1">
+                  {suggestions.map((s, i) => (
+                    <li key={s.variantId}>
+                      <button type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => pickSuggestion(s)}
+                        onMouseEnter={() => setSugIdx(i)}
+                        className={cn("w-full text-left px-3 py-2 flex items-center gap-3", i === sugIdx ? "bg-amber-50" : "hover:bg-slate-50")}>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[13px] font-semibold text-slate-900 truncate">{s.title}</span>
+                          <span className="block text-[11px] text-slate-400">{s.brand} · {s.sku}</span>
+                        </span>
+                        <span className="text-[13px] font-bold text-slate-900 tabular-nums shrink-0">{eur(s.price)}</span>
+                        <span className={cn("text-[11px] font-black tabular-nums shrink-0 px-1.5 py-0.5 rounded", marginClass(s.margin))}>
+                          {pct(s.margin)}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
 
